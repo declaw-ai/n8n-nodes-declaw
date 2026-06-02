@@ -1,0 +1,24 @@
+{
+	"node": "n8n-nodes-declaw.declaw",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Development"],
+	"resources": {
+		"primaryDocumentation": [
+			{
+				"url": "https://docs.declaw.ai"
+			}
+		]
+	},
+	"alias": [
+		"sandbox",
+		"microvm",
+		"firecracker",
+		"code execution",
+		"ai agent",
+		"secure sandbox"
+	],
+	"subcategories": {
+		"Development": ["Other"]
+	}
+}
