@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-declaw",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "n8n community node for Declaw — secure Firecracker microVM sandboxes for AI agents",
   "keywords": [
     "n8n-community-node-package"
@@ -9,7 +9,7 @@
   "homepage": "https://declaw.ai",
   "author": {
     "name": "Declaw",
-    "email": "hello@declaw.ai"
+    "email": "team@declaw.ai"
   },
   "repository": {
     "type": "git",
