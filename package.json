@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-declaw",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "n8n community node for Declaw — secure Firecracker microVM sandboxes for AI agents",
   "keywords": [
     "n8n-community-node-package"
@@ -17,7 +17,7 @@
   },
   "main": "dist/nodes/Declaw/Declaw.node.js",
   "scripts": {
-    "build": "n8n-node build && cp nodes/Declaw/Declaw.node.json dist/nodes/Declaw/",
+    "build": "n8n-node build && cp nodes/Declaw/Declaw.node.json dist/nodes/Declaw/ && cp nodes/DeclawCodeInterpreter/DeclawCodeInterpreter.node.json dist/nodes/DeclawCodeInterpreter/",
     "dev": "n8n-node dev",
     "lint": "n8n-node lint",
     "lintfix": "n8n-node lint --fix",
@@ -33,7 +33,8 @@
       "dist/credentials/DeclawApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/Declaw/Declaw.node.js"
+      "dist/nodes/Declaw/Declaw.node.js",
+      "dist/nodes/DeclawCodeInterpreter/DeclawCodeInterpreter.node.js"
     ]
   },
   "devDependencies": {
