@@ -2,7 +2,7 @@
 	"node": "n8n-nodes-declaw.declaw",
 	"nodeVersion": "1.0",
 	"codexVersion": "1.0",
-	"categories": ["Development", "AI"],
+	"categories": ["Development", "Miscellaneous"],
 	"resources": {
 		"primaryDocumentation": [
 			{
@@ -21,9 +21,5 @@
 		"ai agent",
 		"secure sandbox",
 		"secure execution"
-	],
-	"subcategories": {
-		"Development": ["Other"],
-		"AI": ["Agents", "Tools"]
-	}
+	]
 }
