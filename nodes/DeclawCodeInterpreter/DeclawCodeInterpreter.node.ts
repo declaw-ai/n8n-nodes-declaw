@@ -85,6 +85,21 @@ export class DeclawCodeInterpreter implements INodeType {
 			},
 		],
 		properties: [
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{
+						name: 'Execute Code',
+						value: 'execute',
+						description: 'Run Python or JavaScript code in a secure Firecracker microVM sandbox',
+						action: 'Execute code in a sandbox',
+					},
+				],
+				default: 'execute',
+			},
 			// ── Language ─────────────────────────────────────────────────────
 			{
 				displayName: 'Language',
