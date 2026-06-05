@@ -12,6 +12,7 @@ import { sandboxOperations, sandboxFields } from './descriptions/SandboxDescript
 import { commandOperations, commandFields } from './descriptions/CommandDescription';
 import { fileOperations, fileFields } from './descriptions/FileDescription';
 import { snapshotOperations, snapshotFields } from './descriptions/SnapshotDescription';
+import { codeOperations, codeFields } from './descriptions/CodeDescription';
 import { declawApiRequest } from './transport/request';
 
 interface KeyValueEntry {
@@ -51,6 +52,7 @@ export class Declaw implements INodeType {
 				type: 'options',
 				noDataExpression: true,
 				options: [
+					{ name: 'Code Interpreter', value: 'code' },
 					{ name: 'Command', value: 'command' },
 					{ name: 'File', value: 'file' },
 					{ name: 'Sandbox', value: 'sandbox' },
@@ -58,10 +60,12 @@ export class Declaw implements INodeType {
 				],
 				default: 'sandbox',
 			},
+			...codeOperations,
 			...sandboxOperations,
 			...commandOperations,
 			...fileOperations,
 			...snapshotOperations,
+			...codeFields,
 			...sandboxFields,
 			...commandFields,
 			...fileFields,
@@ -79,7 +83,15 @@ export class Declaw implements INodeType {
 			try {
 				let responseData: IDataObject | IDataObject[] | FullResponse;
 
-				if (resource === 'sandbox') {
+				if (resource === 'code') {
+					const result = await executeCode.call(this, i);
+					const jsonArray = this.helpers.returnJsonArray(result);
+					const executionData = this.helpers.constructExecutionMetaData(jsonArray, {
+						itemData: { item: i },
+					});
+					returnData.push(...executionData);
+					continue;
+				} else if (resource === 'sandbox') {
 					responseData = await executeSandbox.call(this, operation, i);
 				} else if (resource === 'command') {
 					responseData = await executeCommand.call(this, operation, i);
@@ -514,5 +526,225 @@ async function executeSnapshot(
 				this.getNode(),
 				`Unknown snapshot operation: ${operation}`,
 			);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Code Interpreter
+// ---------------------------------------------------------------------------
+
+interface FileEntry {
+	path: string;
+	data: string;
+}
+
+interface CommandResponse {
+	stdout: string;
+	stderr: string;
+	exit_code: number;
+}
+
+interface SandboxCreateResponse {
+	sandbox_id: string;
+}
+
+const SANDBOX_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+async function executeCode(
+	this: IExecuteFunctions,
+	itemIndex: number,
+): Promise<IDataObject> {
+	const language = this.getNodeParameter('language', itemIndex) as string;
+	const code = this.getNodeParameter('code', itemIndex) as string;
+	const options = this.getNodeParameter('codeOptions', itemIndex, {}) as IDataObject;
+
+	const commandTimeout = (options.timeout as number) ?? 30;
+	const template = language === 'javascript' ? 'node' : 'python';
+	const fileName = language === 'javascript' ? '/home/user/main.js' : '/home/user/main.py';
+	const runCmd = language === 'javascript' ? `node ${fileName}` : `python3 ${fileName}`;
+
+	const createBody: IDataObject = {
+		template,
+		timeout: commandTimeout + 120,
+	};
+
+	if (options.envs) {
+		const envsData = options.envs as IDataObject;
+		const envMap = kvToMap(envsData.env as KeyValueEntry[] | undefined);
+		if (Object.keys(envMap).length > 0) {
+			createBody.envs = envMap;
+		}
+	}
+
+	if (options.networkAllowOut) {
+		const allowOut = (options.networkAllowOut as string)
+			.split(',')
+			.map((s) => s.trim())
+			.filter(Boolean);
+		if (allowOut.length > 0) {
+			createBody.network = { allow_out: allowOut };
+		}
+	}
+
+	if (options.securityPolicyJson) {
+		const secJson = (options.securityPolicyJson as string).trim();
+		if (secJson) {
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(secJson);
+			} catch {
+				throw new NodeOperationError(
+					this.getNode(),
+					`Invalid Security Policy JSON: ${secJson.slice(0, 100)}`,
+					{ itemIndex },
+				);
+			}
+			if (parsed === null || typeof parsed !== 'object') {
+				throw new NodeOperationError(
+					this.getNode(),
+					'Security Policy JSON must be an object',
+					{ itemIndex },
+				);
+			}
+			createBody.security = parsed as IDataObject;
+		}
+	} else {
+		const security: IDataObject = {};
+		if (options.enablePiiProtection) {
+			security.pii = {
+				enabled: true,
+				action: (options.piiAction as string) || 'redact',
+				types: ['email', 'phone_number', 'ssn', 'credit_card'],
+				rehydrate_response: false,
+			};
+		}
+		if (options.enableInjectionDefense) {
+			security.injection_defense = {
+				enabled: true,
+				sensitivity: 'medium',
+				action: 'block',
+				threshold: 0.8,
+			};
+		}
+		if (Object.keys(security).length > 0) {
+			createBody.security = security;
+		}
+	}
+
+	const createResp = (await declawApiRequest.call(this, {
+		method: 'POST',
+		path: '/sandboxes',
+		body: createBody,
+	})) as SandboxCreateResponse;
+
+	const sandboxId = createResp.sandbox_id;
+	if (!sandboxId || !SANDBOX_ID_PATTERN.test(sandboxId)) {
+		throw new NodeOperationError(
+			this.getNode(),
+			`Invalid sandbox_id received from API: "${sandboxId}"`,
+			{ itemIndex },
+		);
+	}
+
+	try {
+		await declawApiRequest.call(this, {
+			method: 'POST',
+			path: `/sandboxes/${sandboxId}/files`,
+			body: { path: fileName, data: code },
+		});
+
+		if (options.additionalFiles) {
+			const filesStr = (options.additionalFiles as string).trim();
+			if (filesStr) {
+				let parsedFiles: unknown;
+				try {
+					parsedFiles = JSON.parse(filesStr);
+				} catch {
+					throw new NodeOperationError(
+						this.getNode(),
+						`Invalid Additional Files JSON: ${filesStr.slice(0, 100)}`,
+						{ itemIndex },
+					);
+				}
+				if (!Array.isArray(parsedFiles)) {
+					throw new NodeOperationError(
+						this.getNode(),
+						'Additional Files must be a JSON array of {path, data} objects',
+						{ itemIndex },
+					);
+				}
+				for (const entry of parsedFiles as FileEntry[]) {
+					if (!entry.path || typeof entry.path !== 'string') {
+						throw new NodeOperationError(
+							this.getNode(),
+							'Each file in Additional Files must have a "path" string',
+							{ itemIndex },
+						);
+					}
+					if (entry.data === undefined || typeof entry.data !== 'string') {
+						throw new NodeOperationError(
+							this.getNode(),
+							`File "${entry.path}" must have a "data" string`,
+							{ itemIndex },
+						);
+					}
+				}
+				await declawApiRequest.call(this, {
+					method: 'POST',
+					path: `/sandboxes/${sandboxId}/files/batch`,
+					body: { files: parsedFiles },
+				});
+			}
+		}
+
+		const cmdResp = (await declawApiRequest.call(this, {
+			method: 'POST',
+			path: `/sandboxes/${sandboxId}/commands`,
+			body: { cmd: runCmd, timeout: commandTimeout },
+		})) as CommandResponse;
+
+		const outputFilesMap: IDataObject = {};
+		if (options.outputFiles) {
+			const outputPaths = (options.outputFiles as string)
+				.split(',')
+				.map((s) => s.trim())
+				.filter(Boolean);
+			for (const filePath of outputPaths) {
+				try {
+					const fileResp = await declawApiRequest.call(this, {
+						method: 'GET',
+						path: `/sandboxes/${sandboxId}/files`,
+						qs: { path: filePath },
+					});
+					outputFilesMap[filePath] = typeof fileResp === 'string'
+						? fileResp
+						: JSON.stringify(fileResp);
+				} catch (fileError) {
+					outputFilesMap[filePath] = `ERROR: ${(fileError as Error).message}`;
+				}
+			}
+		}
+
+		const result: IDataObject = {
+			stdout: cmdResp.stdout ?? '',
+			stderr: cmdResp.stderr ?? '',
+			exit_code: cmdResp.exit_code ?? -1,
+			language,
+		};
+
+		if (Object.keys(outputFilesMap).length > 0) {
+			result.output_files = outputFilesMap;
+		}
+
+		return result;
+	} finally {
+		try {
+			await declawApiRequest.call(this, {
+				method: 'DELETE',
+				path: `/sandboxes/${sandboxId}`,
+			});
+		} catch {
+			// Swallow cleanup errors
+		}
 	}
 }

@@ -2,7 +2,7 @@
 	"node": "n8n-nodes-declaw.declaw",
 	"nodeVersion": "1.0",
 	"codexVersion": "1.0",
-	"categories": ["Development"],
+	"categories": ["Development", "AI"],
 	"resources": {
 		"primaryDocumentation": [
 			{
@@ -15,10 +15,15 @@
 		"microvm",
 		"firecracker",
 		"code execution",
+		"code interpreter",
+		"python",
+		"javascript",
 		"ai agent",
-		"secure sandbox"
+		"secure sandbox",
+		"secure execution"
 	],
 	"subcategories": {
-		"Development": ["Other"]
+		"Development": ["Other"],
+		"AI": ["Agents", "Tools"]
 	}
 }
